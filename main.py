@@ -19,6 +19,10 @@ class Config:
         self.INSTA_PASSWORD = self.config['INSTAGRAM']['PASSWORD']
         self.HASHTAGS = self.config['SETTINGS']['HASHTAGS'].split(',')
         self.LIKE_AMOUNT = int(self.config['SETTINGS']['LIKE_AMOUNT'])
+        self.DELAY_BETWEEN_LIKES = int(self.config['SETTINGS']['DELAY_BETWEEN_LIKES'])
+        self.DELAY_BETWEEN_COMMENTS = int(self.config['SETTINGS']['DELAY_BETWEEN_COMMENTS'])
+        self.UNFOLLOW_AFTER_DAYS = int(self.config['SETTINGS']['UNFOLLOW_AFTER_DAYS'])
+        self.COMMENTS_LIST = self.config['SETTINGS']['COMMENTS_LIST'].split(',')
 
 
 # ---------------------- Logging Setup ----------------------
@@ -46,49 +50,46 @@ class InstaBotOps:
     def __init__(self, config: Config):
         self.config = config
         self.bot = Bot()
-        self.COMMENTS_LIST = [
-            "Great post!", "Amazing shot!", "Love this.", "This is fantastic!"
-        ]
 
-    def get_comment(self):
-        return random.choice(self.COMMENTS_LIST)
+    def _get_random_comment(self) -> str:
+        """Retrieve a random comment from the comments list."""
+        return random.choice(self.config.COMMENTS_LIST)
 
-    def should_engage(self, user_id):
+    def _should_engage_with_user(self, user_id: str) -> bool:
+        """Decide whether to engage with a user based on certain criteria."""
         user_info = self.bot.get_user_info(user_id)
         return user_info["follower_count"] / (user_info["following_count"] + 1) > 0.5
 
-    def unfollow_non_followers(self):
+    def _unfollow_non_followers(self):
+        """Unfollow users who aren't following back after a specified duration."""
         non_followers = set(self.bot.following) - set(self.bot.followers)
         for user_id in non_followers:
-            if datetime.now() - self.bot.get_following_status(user_id)["followed_at"] > timedelta(days=7):
+            followed_duration = datetime.now() - self.bot.get_following_status(user_id)["followed_at"]
+            if followed_duration > timedelta(days=self.config.UNFOLLOW_AFTER_DAYS):
                 self.bot.unfollow(user_id)
 
-    def run(self):
+    def run_bot_operations(self):
+        """Main method to execute bot operations."""
         try:
-            # Login
             self.bot.login(username=self.config.INSTA_USERNAME, password=self.config.INSTA_PASSWORD)
+            self._unfollow_non_followers()
 
-            # Unfollow
-            self.unfollow_non_followers()
-
-            # Like, Comment, and Follow
             for hashtag in self.config.HASHTAGS:
                 for post in self.bot.get_hashtag_medias(hashtag, amount=self.config.LIKE_AMOUNT):
                     user_id = self.bot.get_media_owner(post)
-                    if not self.should_engage(user_id):
+                    if not self._should_engage_with_user(user_id):
                         continue
 
                     with Session() as session:
                         if not session.query(LikedPost).filter_by(post_id=post).count():
                             self.bot.like(post)
-                            time.sleep(random.randint(15, 30))
-                            self.bot.comment(post, self.get_comment())
-                            time.sleep(random.randint(30, 60))
+                            time.sleep(self.config.DELAY_BETWEEN_LIKES)
+                            self.bot.comment(post, self._get_random_comment())
+                            time.sleep(self.config.DELAY_BETWEEN_COMMENTS)
                             self.bot.follow(user_id)
                             session.add(LikedPost(post_id=post))
                             session.commit()
 
-            # Logout
             self.bot.logout()
 
         except exc.SQLAlchemyError as db_error:
@@ -103,4 +104,4 @@ class InstaBotOps:
 if __name__ == '__main__':
     config = Config()
     bot_ops = InstaBotOps(config)
-    bot_ops.run()
+    bot_ops.run_bot_operations()

@@ -44,8 +44,11 @@ A simple bot to automate various interactions on Instagram such as liking posts 
    PASSWORD = your_instagram_password
 
    [SETTINGS]
-   HASHTAGS = hashtag1,hashtag2,hashtag3
-   LIKE_AMOUNT = number_of_posts_to_like
+   DELAY_BETWEEN_LIKES = 15
+   DELAY_BETWEEN_COMMENTS = 30
+   UNFOLLOW_AFTER_DAYS = 7
+   COMMENTS_LIST = Great post!,Amazing shot!,Love this.,This is fantastic!
+
    ```
 
 2. Edit `bot.py` if you want to modify the default comments or add new features.
